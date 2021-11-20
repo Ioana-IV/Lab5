@@ -33,6 +33,7 @@ namespace Ivanov_Ioana_Lab5
     {
        //using AutoLotModel;
         ActionState action = ActionState.Nothing;
+       
         AutoLotEntitiesModel ctx = new AutoLotEntitiesModel();
         CollectionViewSource customerViewSource;
         CollectionViewSource inventoryViewSource;
@@ -51,10 +52,14 @@ namespace Ivanov_Ioana_Lab5
             customerViewSource = ((System.Windows.Data.CollectionViewSource)(this.FindResource("customerViewSource")));
             customerViewSource.Source = ctx.Customers.Local;
             ctx.Customers.Load();
-    
+            customerViewSource.View.MoveCurrentToFirst();
+            btnPrevCust.IsEnabled = false;
+
             inventoryViewSource = ((System.Windows.Data.CollectionViewSource)(this.FindResource("inventoryViewSource")));
             inventoryViewSource.Source = ctx.Inventories.Local;
             ctx.Inventories.Load();
+            inventoryViewSource.View.MoveCurrentToFirst();
+            btnPrevInv.IsEnabled = false;
 
             customerOrdersViewSource = ((System.Windows.Data.CollectionViewSource)(this.FindResource("customerOrdersViewSource")));
             customerOrdersViewSource.Source = ctx.Orders.Local;
@@ -86,22 +91,64 @@ namespace Ivanov_Ioana_Lab5
         // these variables will help display the correct name if Edit is cancelled
         String tempFN = null;  //temporare Full Name
         String tempLN = null;  //temporary Last Name
+        Customer customer = null;
 
         private void btnPrevCust_Click(object sender, RoutedEventArgs e)
         {
             customerViewSource.View.MoveCurrentToPrevious();
+           if (customerViewSource.View.IsCurrentBeforeFirst)
+            {
+                customerViewSource.View.MoveCurrentToFirst();
+                btnPrevCust.IsEnabled = false;
+            }
+            else
+            {
+                btnNextCust.IsEnabled = true;
+            }
         }
-
         private void btnNextCust_Click(object sender, RoutedEventArgs e)
         {
             customerViewSource.View.MoveCurrentToNext();
+            if (customerViewSource.View.IsCurrentAfterLast)
+            {
+                customerViewSource.View.MoveCurrentToLast();
+                    btnNextCust.IsEnabled = false;
+            }
+            else
+            {
+                    btnPrevCust.IsEnabled = true;
+            }
         }
 
         private void btnNewCust_Click(object sender, RoutedEventArgs e)
         {
-            action = ActionState.New;
+
+            //Validarea nu va functiona deoarece isi ia datele din customerViewSource. Pentru ca sa functioneze si pentru un element nou, randul respectiv trebuie sa fie existent.
+            //Astfel nu vom putea crea randul nou doar cand dam save, va trebui sa il cream si sa il selectam inainte de a da save.
+
+            //instatiem Customer entity
+            customer = new Customer()
+            {
+                FirstName = "",             //pentru clientii noi, nu vrem sa avem nume/prenume copiate de la alti clienti, astfel le vem da valoarea ""
+                LastName = ""
+            };
+
+            //adaugam entitatea nou creata in context
+            ctx.Customers.Add(customer);
+            BindDataGrid();
             customerViewSource.View.MoveCurrentToLast();
-            customerViewSource.View.MoveCurrentToNext();
+
+
+            //exista o problema cu validarea aceasta. E setat sa verifice la PropertyChange. Astfel ca byDefault butonul Save este valid, si daca nu faci modificari in campuri poti salva inregistrari nule.
+            //Ar trebui sa faca o validare imediat ce se apeleaza functia SetValidationBinding(), ulterior ramanand valida optiunea de PropertyChange
+            //Doar daca modifici ceva in campuri se va triggerui validarea, si va dezactiva butonul de Save
+            BindingOperations.ClearBinding(firstNameTextBox, TextBox.TextProperty);
+            BindingOperations.ClearBinding(lastNameTextBox, TextBox.TextProperty);
+            SetValidationBinding();
+
+
+
+            action = ActionState.New;
             firstNameTextBox.IsEnabled = true;
             lastNameTextBox.IsEnabled = true;
             btnPrevCust.IsEnabled = false;
@@ -109,37 +156,34 @@ namespace Ivanov_Ioana_Lab5
             btnNewCust.IsEnabled = false;
             btnEditCust.IsEnabled = false;
             btnDeleteCust.IsEnabled = false;
-            btnSaveCust.IsEnabled = true;
             btnCancelCust.IsEnabled = true;
+
         }
 
         private void btnEditCust_Click(object sender, RoutedEventArgs e)
         {
-            if (firstNameTextBox.Text != String.Empty)
-            {
-                tempFN = firstNameTextBox.Text;
-                tempLN = lastNameTextBox.Text;
-                action = ActionState.Edit;
-                firstNameTextBox.IsEnabled = true;
-                lastNameTextBox.IsEnabled = true;
-                btnEditCust.IsEnabled = false;
-                btnPrevCust.IsEnabled = false;
-                btnNextCust.IsEnabled = false;
-                btnNewCust.IsEnabled = false;
-                btnDeleteCust.IsEnabled = false;
-                btnSaveCust.IsEnabled = true;
-                btnCancelCust.IsEnabled = true;
-            }
-            else
-            {
-                MessageBox.Show("Please select the entry you want to edit.");
-            }
+
+            BindingOperations.ClearBinding(firstNameTextBox, TextBox.TextProperty);
+            BindingOperations.ClearBinding(lastNameTextBox, TextBox.TextProperty);
+            SetValidationBinding();
+
+            tempFN = firstNameTextBox.Text;
+            tempLN = lastNameTextBox.Text;
+            action = ActionState.Edit;
+            firstNameTextBox.IsEnabled = true;
+            lastNameTextBox.IsEnabled = true;
+            btnEditCust.IsEnabled = false;
+            btnPrevCust.IsEnabled = false;
+            btnNextCust.IsEnabled = false;
+            btnNewCust.IsEnabled = false;
+            btnDeleteCust.IsEnabled = false;
+            btnCancelCust.IsEnabled = true;
 
         }
 
         private void btnDeleteCust_Click(object sender, RoutedEventArgs e)
         {
-            if (firstNameTextBox.Text != String.Empty)
+            if (custIdTextBox.Text != String.Empty)
             {
                 action = ActionState.Delete;
                 firstNameTextBox.IsEnabled = false;
@@ -149,7 +193,6 @@ namespace Ivanov_Ioana_Lab5
                 btnNextCust.IsEnabled = false;
                 btnNewCust.IsEnabled = false;
                 btnDeleteCust.IsEnabled = false;
-                btnSaveCust.IsEnabled = true;
                 btnCancelCust.IsEnabled = true;
             }
             else
@@ -161,30 +204,23 @@ namespace Ivanov_Ioana_Lab5
         private void btnSaveCust_Click(object sender, RoutedEventArgs e)
         {
             Customer customer = null;
+            
             if (action == ActionState.New)
             {
                 try
                 {
-                    //instatiem Customer entity
-                    customer = new Customer()
-                    {
-                        FirstName = firstNameTextBox.Text.Trim(),
-                        LastName = lastNameTextBox.Text.Trim()
-                    };
-
-                    //adaugam entitatea nou creata in context
-                    ctx.Customers.Add(customer);
-                    customerViewSource.View.Refresh();
-
-                    // salvam modificarile
+                    //salvam modificarile
                     ctx.SaveChanges();
-                    customerViewSource.View.MoveCurrentToPrevious();
+                    customerOrdersViewSource.View.Refresh();
+                    BindDataGrid();
+
                 }
                 // using System.Data;
                 catch (DataMisalignedException ex)
                 {
                     MessageBox.Show(ex.Message);
                 }
+
                 firstNameTextBox.IsEnabled = false;
                 lastNameTextBox.IsEnabled = false;
                 btnPrevCust.IsEnabled = true;
@@ -192,7 +228,6 @@ namespace Ivanov_Ioana_Lab5
                 btnNewCust.IsEnabled = true;
                 btnEditCust.IsEnabled = true;
                 btnDeleteCust.IsEnabled = true;
-                btnSaveCust.IsEnabled = false;
                 btnCancelCust.IsEnabled = false;
                 action = ActionState.Nothing;
                 
@@ -225,7 +260,6 @@ namespace Ivanov_Ioana_Lab5
                 btnNewCust.IsEnabled = true;
                 btnEditCust.IsEnabled = true;
                 btnDeleteCust.IsEnabled = true;
-                btnSaveCust.IsEnabled = false;
                 btnCancelCust.IsEnabled = false;
                 action = ActionState.Nothing;
             }
@@ -251,7 +285,6 @@ namespace Ivanov_Ioana_Lab5
                 btnNewCust.IsEnabled = true;
                 btnEditCust.IsEnabled = true;
                 btnDeleteCust.IsEnabled = true;
-                btnSaveCust.IsEnabled = false;
                 btnCancelCust.IsEnabled = false;
                 action = ActionState.Nothing;
             }
@@ -277,7 +310,6 @@ namespace Ivanov_Ioana_Lab5
             btnNewCust.IsEnabled = true;
             btnEditCust.IsEnabled = true;
             btnDeleteCust.IsEnabled = true;
-            btnSaveCust.IsEnabled = false;
             btnCancelCust.IsEnabled = false;
             customerViewSource.View.Refresh();
             action = ActionState.Nothing;
@@ -706,6 +738,32 @@ namespace Ivanov_Ioana_Lab5
             action = ActionState.Nothing;
         }
 
+        // --------------------------------------------------------------------------------------
+        //  VALIDATION
+        // --------------------------------------------------------------------------------------
+
+        private void SetValidationBinding()
+        {
+            Binding firstNameValidationBinding = new Binding();
+            firstNameValidationBinding.Source = customerViewSource;
+            firstNameValidationBinding.Path = new PropertyPath("FirstName");
+            firstNameValidationBinding.NotifyOnValidationError = true;
+            firstNameValidationBinding.Mode = BindingMode.TwoWay;
+            firstNameValidationBinding.UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged;
+            //string required
+            firstNameValidationBinding.ValidationRules.Add(new StringNotEmpty());
+            firstNameTextBox.SetBinding(TextBox.TextProperty, firstNameValidationBinding);
+
+            Binding lastNameValidationBinding = new Binding();
+            lastNameValidationBinding.Source = customerViewSource;
+            lastNameValidationBinding.Path = new PropertyPath("LastName");
+            lastNameValidationBinding.NotifyOnValidationError = true;
+            lastNameValidationBinding.Mode = BindingMode.TwoWay;
+            lastNameValidationBinding.UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged;
+            //string min length validator
+            lastNameValidationBinding.ValidationRules.Add(new StringMinLengthValidator());
+            lastNameTextBox.SetBinding(TextBox.TextProperty, lastNameValidationBinding); //setare binding now
+        }
     }
 
 
